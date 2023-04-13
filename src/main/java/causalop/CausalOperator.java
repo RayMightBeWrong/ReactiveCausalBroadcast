@@ -26,13 +26,12 @@ public class CausalOperator<T> implements ObservableOperator<T, CausalMessage<T>
             public void onNext(@NonNull CausalMessage<T> m) {
                 
                 boolean toBuffer = false;
-                if (vv[m.j] + 1 == v[m.j])
+                if (vv[m.j] + 1 == m.v[m.j])
                     toBuffer = true;
 
 
-                //    if i != node_id and vv[i] < clock[i]:
                 for (int i = 0; i < n; i++){
-                    if (i )
+                    if (i != m.j && vv[i] <= m.v[i])
                         toBuffer = true;
                 }
 

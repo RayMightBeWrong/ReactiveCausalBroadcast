@@ -1,4 +1,7 @@
-//package causalop;
+package causalop;
+
+import java.util.Comparator;
+
 public class CasualMessageComparator implements Comparator {
     @Override
     public int compare(CausalMessage<T> o1, CausalMessage<T> o2){
