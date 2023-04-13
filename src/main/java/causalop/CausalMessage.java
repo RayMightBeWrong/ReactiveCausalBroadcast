@@ -1,5 +1,7 @@
 package causalop;
 
+import java.util.Arrays;
+
 public class CausalMessage<T> {
     int j, v[];
     public T payload;
