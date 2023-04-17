@@ -22,11 +22,18 @@ public class CausalMessageComparator<T> implements Comparator<CausalMessage<T>> 
                 counterHigher++;
         }
 
-        //if only the lower counter is higher than 0, then vv1 is less than vv2
-        //if both counters are higher than 0, then the messages are concurrent
-        //any of them can appear first since there is no causal relationship between them
-        if(counterLower > 0)
-            return -1;
+        if(counterLower > 0) {
+            //if only the lower counter is higher than 0, then vv1 is less than vv2
+            if(counterHigher == 0)
+                return -1;
+            //if both counters are higher than 0, then the messages are concurrent.
+            // Any of them can appear first since there is no causal relationship between them,
+            // but having in mind the order in which the objects are emitted,
+            // the returned value will be 1, so that the concurrent message that was emitted
+            // by the upstream first, will also be emitted first to the downstream
+            else
+                return 1;
+        }
         else if(counterLower == 0){
             //vv2 is less than vv1
             if(counterHigher > 0) return 1;

@@ -107,6 +107,43 @@ public class FlowableCausalOpTest {
     }
 
     @Test
+    public void testReorder2() {
+        var l = new ArrayList<String>();
+        Flowable.just(
+                        new CausalMessage<String>("c", 0, 2, 1),
+                new CausalMessage<String>("d", 1, 1, 2),
+                        new CausalMessage<String>("a", 1, 0, 1),
+                        new CausalMessage<String>("b", 0, 1, 0)
+                )
+                .lift(new FlowableCausalOperator<String>(2))
+                .blockingSubscribe(new DefaultSubscriber<>(){
+                    @Override
+                    protected void onStart() {
+                        request(1);
+                    }
+
+                    @Override
+                    public void onNext(String s) {
+                        l.add(s);
+                        request(1);
+                    }
+
+                    @Override
+                    public void onError(Throwable throwable) {
+
+                    }
+
+                    @Override
+                    public void onComplete() {
+
+                    }
+                });
+
+        System.out.println(l);
+        Assert.assertArrayEquals(l.toArray(), new String[]{"a","b","c","d"});
+    }
+
+    @Test
     public void testDupl() {
         var l = new ArrayList<String>();
         Flowable.just(
