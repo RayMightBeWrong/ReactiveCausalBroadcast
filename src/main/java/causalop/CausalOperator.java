@@ -70,22 +70,22 @@ public class CausalOperator<T> implements ObservableOperator<T, CausalMessage<T>
 
             private void receive(CausalMessage<T> cm){
                 int canBeDelivered = canItBeDelivered(cm);
-                if(canBeDelivered == 1)
+                if(canBeDelivered == 1) {
                     deliver(cm);
+                    tryDeliveringBufferedMsgs();
+                }
                 else if(canBeDelivered == 0)
                     buffer.add(cm);
                 //else ignore the msg
             }
 
             private void tryDeliveringBufferedMsgs(){
-                boolean stop = false;
-                for(var it = buffer.iterator(); !stop && it.hasNext() ; ){
+                for(var it = buffer.iterator(); it.hasNext() ; ){
                     var cm = it.next();
 
                     if(canItBeDelivered(cm) == 1) {
                         it.remove();
                         deliver(cm);
-                        stop = true;
                     }
                     else break;
                 }
@@ -94,7 +94,6 @@ public class CausalOperator<T> implements ObservableOperator<T, CausalMessage<T>
             private void deliver(CausalMessage<T> cm){
                 vv[cm.j]++;
                 down.onNext(cm.payload);
-                tryDeliveringBufferedMsgs();
             }
         };
     }
