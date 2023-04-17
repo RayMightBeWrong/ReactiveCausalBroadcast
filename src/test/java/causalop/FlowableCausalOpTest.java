@@ -1,7 +1,6 @@
 package causalop;
 
 import io.reactivex.rxjava3.core.Flowable;
-import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.internal.util.AtomicThrowable;
 import io.reactivex.rxjava3.subscribers.DefaultSubscriber;
 import org.junit.Assert;
@@ -42,6 +41,20 @@ public class FlowableCausalOpTest {
                     }
                 });
 
+        System.out.println(l);
+        Assert.assertArrayEquals(l.toArray(), new String[]{"a","b","c"});
+    }
+
+    @Test
+    public void testOkInfiniteCredits() {
+        var l = Flowable.just(
+                        new CausalMessage<String>("a", 1, 0, 1),
+                        new CausalMessage<String>("b", 0, 1, 0),
+                        new CausalMessage<String>("c", 1, 1, 2)
+                )
+                .lift(new FlowableCausalOperator<String>(2))
+                .toList().blockingGet();
+
         Assert.assertArrayEquals(l.toArray(), new String[]{"a","b","c"});
     }
 
@@ -76,6 +89,19 @@ public class FlowableCausalOpTest {
 
                     }
                 });
+
+        Assert.assertArrayEquals(l.toArray(), new String[]{"a","b","c"});
+    }
+
+    @Test
+    public void testReorderInfiniteCredits() {
+        var l = Flowable.just(
+                        new CausalMessage<String>("c", 1, 1, 2),
+                        new CausalMessage<String>("a", 1, 0, 1),
+                        new CausalMessage<String>("b", 0, 1, 0)
+                )
+                .lift(new FlowableCausalOperator<String>(2))
+                .toList().blockingGet();
 
         Assert.assertArrayEquals(l.toArray(), new String[]{"a","b","c"});
     }
@@ -116,6 +142,20 @@ public class FlowableCausalOpTest {
         Assert.assertArrayEquals(l.toArray(), new String[]{"a","b","c"});
     }
 
+    @Test
+    public void testDuplInfiniteCredits() {
+        var l = Flowable.just(
+                        new CausalMessage<String>("a", 1, 0, 1),
+                        new CausalMessage<String>("b", 0, 1, 0),
+                        new CausalMessage<String>("a", 1, 0, 1),
+                        new CausalMessage<String>("c", 1, 1, 2)
+                )
+                .lift(new FlowableCausalOperator<String>(2))
+                .toList().blockingGet();
+
+        Assert.assertArrayEquals(l.toArray(), new String[]{"a","b","c"});
+    }
+
     @Test(expected = IllegalArgumentException.class)
     public void testGap() {
         var l = new ArrayList<String>();
@@ -150,5 +190,15 @@ public class FlowableCausalOpTest {
 
         Throwable thr = t.get();
         if(thr != null) throw (RuntimeException) thr;
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testGapInfiniteCredits() {
+        var l = Flowable.just(
+                        new CausalMessage<String>("c", 1, 1, 2),
+                        new CausalMessage<String>("a", 1, 0, 1)
+                )
+                .lift(new FlowableCausalOperator<String>(2))
+                .toList().blockingGet();
     }
 }

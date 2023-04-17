@@ -24,11 +24,11 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
 
         private final Subscriber<? super T> down;
         private Subscription up;
-        private long requested = 0;
+        private long credits = 0;
         private boolean completed = false;
 
         private final int n;
-        private final Set<CausalMessage<T>> buffer = new TreeSet<>(new CasualMessageComparator<T>());
+        private final Set<CausalMessage<T>> buffer = new TreeSet<>(new CausalMessageComparator<T>());
         private int[] vv;
 
         public CausalSubscriber(Subscriber<? super T> down, int n) {
@@ -48,16 +48,13 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
             receive(cm);
 
             // We have already requested Long.MAX_VALUE, so we can't request any more.
-            if(requested == Long.MAX_VALUE)
+            if(credits == Long.MAX_VALUE)
                 return;
 
             //All the requested messages have been buffered,
             // so we need to request more to avoid a deadlock.
-            if (requested > 0 && requested == buffer.size()) {
-                requested++;
-                System.out.println("requested upstream: " + 1);
+            if (!completed && credits > 0)
                 up.request(1);
-            }
         }
 
         @Override
@@ -70,24 +67,28 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
             down.onError(e);
         }
 
+
         @Override
         public void onComplete() {
             synchronized (this) {
                 completed = true;
 
-                System.out.println("End credits: " + requested);
-
-                if (buffer.size() > 0)
-                    down.onError(new IllegalArgumentException());
-                else
+                if(buffer.size() == 0)
                     down.onComplete();
-
+                else {
+                    //if the message with the "lowest" version vector in the buffer cannot be delivered
+                    // then an IllegalArgumentException is thrown
+                    CausalMessage<T> fst = buffer.stream().findFirst().get();
+                    if (canItBeDelivered(fst) == 0)
+                        down.onError(new IllegalArgumentException());
+                    //else the onComplete will be put on hold because there are messages that haven't been
+                    // sent downstream
+                }
             }
         }
 
         @Override
         public void request(long l) {
-            System.out.println("downstream requested: " + l);
 
             if (l <= 0) {
                 onError(new IllegalArgumentException("Non-positive request"));
@@ -96,31 +97,27 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
 
             synchronized (this) {
                 //Already have max number of credits
-                if (requested == Long.MAX_VALUE) return;
+                if (credits == Long.MAX_VALUE) return;
 
                 //Avoid negative number because of overflow
-                long newRequested = requested + l;
+                long newRequested = credits + l;
                 if (newRequested < 0) newRequested = Long.MAX_VALUE;
-                requested = newRequested;
+                credits = newRequested;
 
                 //Forward unbounded request
                 if (newRequested == Long.MAX_VALUE) {
-                    System.out.println("requested upstream: " + Long.MAX_VALUE);
                     up.request(Long.MAX_VALUE);
                     return;
                 }
 
                 //Try to deliver msgs if the buffer is not empty and
                 // if there are credits available
-                if (!buffer.isEmpty() && requested > 0)
-                    tryDeliveringBufferedMsgs();
+                tryDeliveringBufferedMsgs();
 
                 if (completed)
-                    down.onComplete();
-                else if (requested > 0) {
-                    System.out.println("requested upstream: " + 1);
+                    onComplete();
+                else if (credits > 0)
                     up.request(1);
-                }
             }
         }
 
@@ -164,34 +161,33 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
 
         private void receive(CausalMessage<T> cm){
             int canBeDelivered = canItBeDelivered(cm);
-            if(canBeDelivered == 1)
+            if(canBeDelivered == 1) {
                 deliver(cm);
+                tryDeliveringBufferedMsgs();
+            }
             else if(canBeDelivered == 0)
                 buffer.add(cm);
-            else //in case of a duplicate msg, we need to request upstream once again
-                up.request(1);
+            //else //in case of a duplicate msg, we need to request upstream once again
+            //    up.request(1);
         }
 
         private void tryDeliveringBufferedMsgs(){
-            boolean stop = false;
 
-            for(var it = buffer.iterator(); requested > 0 && !completed && !stop && it.hasNext() ; ){
+            for(var it = buffer.iterator(); credits > 0 && it.hasNext() ; ){
                 var cm = it.next();
 
                 if(canItBeDelivered(cm) == 1) {
                     it.remove();
                     deliver(cm);
-                    stop = true;
                 }
                 else break;
             }
         }
 
         private void deliver(CausalMessage<T> cm){
-            requested--;
+            credits--;
             vv[cm.j]++;
             down.onNext(cm.payload);
-            tryDeliveringBufferedMsgs();
         }
     }
 }

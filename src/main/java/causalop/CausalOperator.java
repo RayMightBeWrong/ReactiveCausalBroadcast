@@ -11,7 +11,7 @@ import java.util.TreeSet;
 public class CausalOperator<T> implements ObservableOperator<T, CausalMessage<T>> {
     
     private final int n;
-    private final Set<CausalMessage<T>> buffer = new TreeSet<>(new CasualMessageComparator<T>());
+    private final Set<CausalMessage<T>> buffer = new TreeSet<>(new CausalMessageComparator<T>());
     private int[] vv;
     
     public CausalOperator(int n) {
