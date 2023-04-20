@@ -1,19 +1,19 @@
 package causalop;
 
-import java.util.Arrays;
+import java.util.Map;
 
 public class CausalMessage<T> {
-    int j, v[];
+    int j;
+    Map<Integer, Integer> v;
     public T payload;
 
-    public CausalMessage(T payload, int j, int... v) {
+    public CausalMessage(T payload, int j, Map<Integer, Integer> v) {
         this.payload = payload;
         this.j = j;
         this.v = v;
     }
 
-
-    public int[] getV() {
+    public Map<Integer, Integer> getV() {
         return v;
     }
 
