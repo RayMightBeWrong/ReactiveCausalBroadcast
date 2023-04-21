@@ -39,24 +39,28 @@ public class CausalMessageComparator<T> implements Comparator<CausalMessage<T>> 
                         return 1;
 
                     }else if(_vv1_cm1 == _vv2_cm1){
-
-                        if(_vv1_cm2 > _vv2_cm2)
-                            return 1;
-                        if(_vv1_cm2 < _vv2_cm2)
-                            return -1;
-                        else
-                            throw new IllegalArgumentException();
+                      if(_vv1_cm2 >= _vv2_cm2)
+                        throw new IllegalArgumentException();
+                          // considering {2, 2} -> a and {2, 1} -> b
+                          // node a must receive b=2 to send a=2
+                          // but node b when sending b=1, has already received a=2
+                          // which makes no logical sense
+                      if(_vv1_cm2 < _vv2_cm2)
+                        return -1;
 
                     }else{ // if _vv1_cm1 < _vv2_cm1
-
-                        if(_vv1_cm2 > _vv2_cm2)
-                            return 1;
-                        else
-                            return -1;
+                      if(_vv1_cm2 >= _vv2_cm2)
+                        throw new IllegalArgumentException();
+                          // considering {2, 2} -> a and {3, 1} -> b
+                          // node a must receive b=2 to send a=2
+                          // but node b when sending b=1, has already a=3
+                          // which makes no logical sense
+                      else
+                        return -1;
                     }
 
                     /*
-                         cm1 | cm2 | return
+                        node1 | node2 | return
                         -----+-----+-------
                           >  |  >  |   1
                         -----+-----+-------
@@ -64,15 +68,15 @@ public class CausalMessageComparator<T> implements Comparator<CausalMessage<T>> 
                         -----+-----+-------
                           >  |  <  |   1 (concurrent)
                         -----+-----+-------
-                          =  |  >  |   1
+                          =  |  >  | Impossible
                         -----+-----+-------
                           =  |  =  | Impossible
                         -----+-----+-------
                           =  |  <  |  -1
                         -----+-----+-------
-                          <  |  >  |   1 (concurrent)
+                          <  |  >  | Impossible
                         -----+-----+-------
-                          <  |  =  |  -1
+                          <  |  =  | Impossible
                         -----+-----+-------
                           <  |  <  |  -1
                         -----+-----+-------
