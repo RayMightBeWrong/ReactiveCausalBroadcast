@@ -5,23 +5,18 @@ import io.reactivex.rxjava3.core.ObservableOperator;
 import io.reactivex.rxjava3.core.Observer;
 import io.reactivex.rxjava3.observers.DisposableObserver;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
 public class CausalOperator<T> implements ObservableOperator<T, CausalMessage<T>> {
-    
-    private final int n;
+
     private final Set<CausalMessage<T>> buffer;
-    private Map<Integer, Integer> vv;
+    private final int[] vv;
     
     public CausalOperator(int n) {
-        this.n = n;
         this.buffer = new TreeSet<>(new CausalMessageComparator<T>(n));
-        this.vv = new HashMap<>();
-        for (int i = 0; i < n; i++)
-            this.vv.put(i, 0);
+        this.vv = new int[n];
     }
 
     @Override
@@ -54,7 +49,7 @@ public class CausalOperator<T> implements ObservableOperator<T, CausalMessage<T>
                 var node = cm.j;
 
                 //First condition to be met for the msg to be delivered
-                boolean b = vv.get(node) + 1 == m_vv.get(node);
+                boolean b = vv[node] + 1 == m_vv.get(node);
 
                 //if the first condition is false, it can be either because
                 // the message is a duplicate, or because it is not yet time
@@ -62,12 +57,12 @@ public class CausalOperator<T> implements ObservableOperator<T, CausalMessage<T>
                 if(!b){
                     //If the value present in the version vector is equal or higher than the
                     // one present in the msg, than the msg is a duplicate
-                    if(vv.get(node) >= m_vv.get(node)) return -1;
+                    if(vv[node] >= m_vv.get(node)) return -1;
                     else return 0;
                 }
 
                 for (Map.Entry<Integer, Integer> entry: m_vv.entrySet()){
-                    if (entry.getKey() != node && entry.getValue() > vv.get(entry.getKey())){
+                    if (entry.getKey() != node && entry.getValue() > vv[entry.getKey()]){
                         return 0;
                     }
                 }
@@ -83,7 +78,7 @@ public class CausalOperator<T> implements ObservableOperator<T, CausalMessage<T>
                 }
                 else if(canBeDelivered == 0)
                     buffer.add(cm);
-                //else ignore the msg
+                //else ignore the msg because it is a duplicate
             }
 
             private void tryDeliveringBufferedMsgs(){
@@ -99,7 +94,7 @@ public class CausalOperator<T> implements ObservableOperator<T, CausalMessage<T>
             }
 
             private void deliver(CausalMessage<T> cm){
-                vv.put(cm.j, vv.get(cm.j) + 1);
+                vv[cm.j]++;
                 down.onNext(cm.payload);
             }
         };

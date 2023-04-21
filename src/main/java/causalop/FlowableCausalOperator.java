@@ -26,18 +26,13 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
         private Subscription up;
         private long credits = 0;
         private boolean completed = false;
-
-        private final int n;
         private final Set<CausalMessage<T>> buffer;
-        private Map<Integer, Integer> vv;
+        private final int[] vv;
 
         public CausalSubscriber(Subscriber<? super T> down, int n) {
             this.down = down;
-            this.n = n;
             this.buffer = new TreeSet<>(new CausalMessageComparator<T>(n));
-            this.vv = new HashMap<>();
-            for (int i=0; i < n; i++)
-                this.vv.put(i, 0);
+            this.vv = new int[n];
         }
 
         @Override
@@ -48,7 +43,9 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
 
         @Override
         public void onNext(@NonNull CausalMessage<T> cm) {
-            receive(cm);
+            synchronized (this) {
+                receive(cm);
+            }
 
             // We have already requested Long.MAX_VALUE, so we can't request any more.
             if(credits == Long.MAX_VALUE)
@@ -143,7 +140,7 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
             var node = cm.j;
 
             //First condition to be met for the msg to be delivered
-            boolean b = vv.get(node) + 1 == m_vv.get(node);
+            boolean b = vv[node] + 1 == m_vv.get(node);
 
             //if the first condition is false, it can be either because
             // the message is a duplicate, or because it is not yet time
@@ -151,12 +148,12 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
             if(!b){
                 //If the value present in the version vector is equal or higher than the
                 // one present in the msg, than the msg is a duplicate
-                if(vv.get(node) >= m_vv.get(node)) return -1;
+                if(vv[node] >= m_vv.get(node)) return -1;
                 else return 0;
             }
 
             for (Map.Entry<Integer, Integer> entry: m_vv.entrySet()){
-                if (entry.getKey() != node && entry.getValue() > vv.get(entry.getKey())){
+                if (entry.getKey() != node && entry.getValue() > vv[entry.getKey()]){
                     return 0;
                 }
             }
@@ -172,8 +169,6 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
             }
             else if(canBeDelivered == 0)
                 buffer.add(cm);
-            //else //in case of a duplicate msg, we need to request upstream once again
-            //    up.request(1);
         }
 
         private void tryDeliveringBufferedMsgs(){
@@ -191,7 +186,7 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
 
         private void deliver(CausalMessage<T> cm){
             credits--;
-            vv.put(cm.j, vv.get(cm.j) + 1);
+            vv[cm.j]++;
             down.onNext(cm.payload);
         }
     }
