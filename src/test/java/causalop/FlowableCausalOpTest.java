@@ -391,16 +391,17 @@ public class FlowableCausalOpTest {
      * @param n number of nodes
      * @param m number of messages
      * @param seed integer that allows reproducing the same results
+     * @param seed_shuffle seed for shuffle
      * @return a tuple containing two lists of causal messages containing an integer as payload.
      * The first list is sorted by the first element generated to last element generated.
      * The second list has the same objects as the first list, but they are shuffled.
      * Only duplicate messages have the same payload.
      */
-    private Tuple<List<CausalMessage<Integer>>,List<CausalMessage<Integer>>> randomMessagesGenerator(int n, int m, int seed){
+    private Tuple<List<CausalMessage<Integer>>,List<CausalMessage<Integer>>> randomMessagesGenerator(int n, int m, int seed, int seed_shuffle){
         RandomMessagesGenerator rmg = new RandomMessagesGenerator(n,m,seed);
         var original = rmg.generate();
         var shuffled = new ArrayList<>(original);
-        Collections.shuffle(shuffled);
+        Collections.shuffle(shuffled, new Random(seed_shuffle));
         return new Tuple<>(original, shuffled);
     }
 
@@ -471,11 +472,22 @@ public class FlowableCausalOpTest {
         // messages that should be generated, and the last argument
         // is the seed.
 
-        int nr_of_nodes = 2,
-            nr_of_msgs = 10,
-            seed = 123123;
+        //int nr_of_nodes = 2,
+        //    nr_of_msgs = 10,
+        //    seed = 123123,
+        //    seed_shuffle = 123123;
 
-        var tuple = randomMessagesGenerator(nr_of_nodes, nr_of_msgs, seed);
+        //int nr_of_nodes = 6,
+        //    nr_of_msgs = 33,
+        //    seed = 111106,
+        //    seed_shuffle = 1;
+
+        int nr_of_nodes = 2,
+                nr_of_msgs = 10,
+                seed = 37036,
+                seed_shuffle = 1;
+
+        var tuple = randomMessagesGenerator(nr_of_nodes, nr_of_msgs, seed, seed_shuffle);
         var l = new ArrayList<Integer>();
 
         Flowable.fromIterable(tuple.snd)
@@ -511,5 +523,61 @@ public class FlowableCausalOpTest {
         System.out.println("Result: " + l);
 
         Assert.assertTrue(assertCausalOrder(tuple.fst, l));
+    }
+
+    @Test
+    public void testMultipleRandomTests() {
+
+        //int nr_of_nodes = 2,
+        //        nr_of_msgs = 10,
+        //        seed = 123123;
+
+        for (int n = 2; n < 20; n++){
+            for (int n_msgs = 2; n_msgs < 50 ; n_msgs++){
+                for (int j = 0, seed = 1; j < 10 ; j++, seed += 12345){
+                    var tuple = randomMessagesGenerator(n, n_msgs, seed, 1);
+                    var l = new ArrayList<Integer>();
+                    final AtomicThrowable t = new AtomicThrowable();
+                    Flowable.fromIterable(tuple.snd)
+                            .lift(new FlowableCausalOperator<Integer>(n))
+                            .blockingSubscribe(new DefaultSubscriber<>(){
+                                @Override
+                                protected void onStart() {
+                                    request(1);
+                                }
+
+                                @Override
+                                public void onNext(Integer s) {
+                                    l.add(s);
+                                    request(1);
+                                }
+
+                                @Override
+                                public void onError(Throwable throwable) {
+                                    t.set(throwable);
+                                }
+
+                                @Override
+                                public void onComplete() {
+
+                                }
+                            });
+
+                    try {
+                        Throwable thr = t.get();
+                        if(thr != null) throw (RuntimeException) thr;
+
+                        Assert.assertTrue(assertCausalOrder(tuple.fst, l));
+                    }catch (Exception e){
+                        System.out.println("n: " + n);
+                        System.out.println("n_msgs: " + n_msgs);
+                        System.out.println("seed: " + seed);
+                        System.out.println("msgs: " + tuple.fst);
+                        System.out.println("order: " + tuple.snd.stream().map(cm -> cm.payload).toList());
+                        throw e;
+                    }
+                }
+            }
+        }
     }
 }

@@ -79,8 +79,9 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
                     //if the message with the "lowest" version vector in the buffer cannot be delivered
                     // then an IllegalArgumentException is thrown
                     if (!anyMessageThatCanBeDelivered()) {
-                        buffer.clear();
                         down.onError(new IllegalArgumentException());
+                        System.out.println("buffer on error: " + buffer);
+                        buffer.clear();
                     }
                     //else the onComplete will be put on hold because there are messages that haven't been
                     // sent downstream
@@ -166,8 +167,9 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
                 deliver(cm);
                 tryDeliveringBufferedMsgs();
             }
-            else if(canBeDelivered == 0)
+            else if(canBeDelivered == 0) {
                 buffer.add(cm);
+            }
         }
 
         private void tryDeliveringBufferedMsgs(){
@@ -201,6 +203,7 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
             credits--;
             vv[cm.j]++;
             down.onNext(cm.payload);
+            buffer.remove(cm); // remove possible copy existing in the buffer
         }
     }
 }
