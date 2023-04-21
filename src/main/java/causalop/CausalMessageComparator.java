@@ -1,146 +1,44 @@
 package causalop;
 
 import java.util.Comparator;
-import java.util.Map;
+import java.util.TreeSet;
 
 public class CausalMessageComparator<T> implements Comparator<CausalMessage<T>> {
-    int n;
-
-    public CausalMessageComparator(int n){
-        this.n = n;
-    }
 
     @Override
     public int compare(CausalMessage<T> cm1, CausalMessage<T> cm2){
-        Map<Integer, Integer> vv1 = cm1.getV(); //version vector 1
-        Map<Integer, Integer> vv2 = cm2.getV(); //version vector 2
+        int[] vv1 = cm1.getV(); //version vector 1
+        int[] vv2 = cm2.getV();
 
-        // messages sent from the same node
-        if (cm1.j == cm2.j){
-            Integer _v1 = vv1.get(cm1.j);
-            Integer _v2 = vv2.get(cm2.j);
-            return _v1.compareTo(_v2);
+        int counterHigher = 0, //number of clocks which value is higher in vv1
+                counterLower = 0; //number of clocks which value is lower in vv1
+
+        for(int i = 0; i < vv1.length; i++){
+            int _v1 = vv1[i], _v2 = vv2[i];
+
+            if (_v1 < _v2)
+                counterLower++;
+            else if(_v1 > _v2)
+                counterHigher++;
         }
 
-        // messages sent from different nodes
-
-        if (vv1.size() != 1 || vv2.size() != 1) {
-
-            if (vv1.containsKey(cm2.j)){
-
-                //if each vector contains a value for the sender of the other vector
-                if(vv2.containsKey(cm1.j)){
-                    Integer _vv1_cm1 = vv1.get(cm1.j), // _vv1_cm1 means version value of the sender of cm1 present in vv1
-                            _vv1_cm2 = vv1.get(cm2.j),
-                            _vv2_cm1 = vv2.get(cm1.j),
-                            _vv2_cm2 = vv2.get(cm2.j);
-
-                    if(_vv1_cm1 > _vv2_cm1) {
-                        return 1;
-
-                    }else if(_vv1_cm1 == _vv2_cm1){
-                        if(_vv1_cm2 >= _vv2_cm2)
-                            throw new IllegalArgumentException();
-                            // considering {2, 2} -> a and {2, 1} -> b
-                            // node a must receive b=2 to send a=2
-                            // but node b when sending b=1, has already received a=2
-                            // which makes no logical sense
-                        return -1;
-
-                    }else{ // if _vv1_cm1 < _vv2_cm1
-                      if(_vv1_cm2 >= _vv2_cm2)
-                        throw new IllegalArgumentException();
-                          // considering {2, 2} -> a and {3, 1} -> b
-                          // node a must receive b=2 to send a=2
-                          // but node b when sending b=1, has already a=3
-                          // which makes no logical sense
-
-                      return -1;
-                    }
-
-                    /*
-                        In column 'node1', we can see comparison operators, that inform the relationship
-                         between the version value for node 1 present in vv1,
-                         and the version value for node 1 present in vv2.
-
-                        Same logic applied for the column 'nod
-                        Column 'node1' means comparing the version values that correspond to node1.
-                        Column 'node2' means comparing the version values that correspond to node1.
-                        Column 'return' means comparing the version values that correspond to node1.e2'.
-
-                        Example of how to read each row (first row):
-                            When the value of node1 in vv1 is higher than the value of node1 in vv2,
-                             and the value of node2 in vv1 is higher than the value of node2 in vv2,
-                             the return value is 1.
-
-                        node1 | node2 | return
-                        ----- + ----- + -------
-                          >   |   >   |    1
-                        ----- + ----- + -------
-                          >   |   =   |    1
-                        ----- + ----- + -------
-                          >   |   <   |    1 (concurrent)
-                        ----- + ----- + -------
-                          =   |   >   |  Impossible
-                        ----- + ----- + -------
-                          =   |   =   |  Impossible
-                        ----- + ----- + -------
-                          =   |   <   |   -1
-                        ----- + ----- + -------
-                          <   |   >   |  Impossible
-                        ----- + ----- + -------
-                          <   |   =   |  Impossible
-                        ----- + ----- + -------
-                          <   |   <   |   -1
-                        ----- + ----- + -------
-
-                        NOTE: When the messages are concurrent we want cm1 to appear after cm2, therefore the return value is 1
-                    */
-
-                }else { // if (!vv2.containsKey(cm1.j))
-
-                    /*
-                         node2 | return
-                         ----- + -------
-                           <   |    1  (concurrent)
-                         ----- + -------
-                           =   |    1
-                         ----- + -------
-                           >   |    1
-                         ----- + -------
-                    */
-
-                    return 1;
-                }
-
-            } else if (vv2.containsKey(cm1.j)) {
-                /*
-                         node1 | return
-                         ----- + -------
-                           <   |   -1  (concurrent)
-                         ----- + -------
-                           =   |   -1
-                         ----- + -------
-                           >   |    1 (concurrent or even if we had the full vv's we would reach the conclusion that vv2 < vv1)
-                         ----- + -------
-                    */
-
-                Integer _vv1_cm1 = vv1.get(cm1.j), // _vv1_cm1 means version value of the sender of cm1 present in vv1
-                        _vv2_cm1 = vv2.get(cm1.j);
-
-                if(_vv1_cm1 <= _vv2_cm1)
-                    return -1;
-                else
-                    return 1;
-            }
+        if(counterLower > 0) {
+            //if only the lower counter is higher than 0, then vv1 is less than vv2
+            if(counterHigher == 0)
+                return -1;
+                //if both counters are higher than 0, then the messages are concurrent.
+                // Any of them can appear first since there is no causal relationship between them,
+                // but having in mind the order in which the objects are emitted,
+                // the returned value will be 1, so that the concurrent message that was emitted
+                // by the upstream first, will also be emitted first to the downstream
+            else
+                return 1;
         }
-        // if the size of both vectors equals to 1, then they are concurrent
-        //  because the only value sent corresponds to the version of the node
-        //  that sent the message, and since the senders are different,
-        //  the messages are concurrent.
-        //  The value 1 is returned because we want to maintain the order in which
-        //  the messages arrived
-
-        return 1;
+        else{
+            //vv2 is less than vv1
+            if(counterHigher > 0) return 1;
+                //Version vectors are equal, so a duplicate message has arrived
+            else return 0;
+        }
     }
 }

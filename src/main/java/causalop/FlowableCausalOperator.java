@@ -31,7 +31,7 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
 
         public CausalSubscriber(Subscriber<? super T> down, int n) {
             this.down = down;
-            this.buffer = new TreeSet<>(new CausalMessageComparator<T>(n));
+            this.buffer = new TreeSet<>(new CausalMessageComparator<T>());
             this.vv = new int[n];
         }
 
@@ -78,9 +78,10 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
                 else {
                     //if the message with the "lowest" version vector in the buffer cannot be delivered
                     // then an IllegalArgumentException is thrown
-                    CausalMessage<T> fst = buffer.stream().findFirst().get();
-                    if (canItBeDelivered(fst) == 0)
+                    if (!anyMessageThatCanBeDelivered()) {
+                        buffer.clear();
                         down.onError(new IllegalArgumentException());
+                    }
                     //else the onComplete will be put on hold because there are messages that haven't been
                     // sent downstream
                 }
@@ -140,7 +141,7 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
             var node = cm.j;
 
             //First condition to be met for the msg to be delivered
-            boolean b = vv[node] + 1 == m_vv.get(node);
+            boolean b = vv[node] + 1 == m_vv[node];
 
             //if the first condition is false, it can be either because
             // the message is a duplicate, or because it is not yet time
@@ -148,15 +149,13 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
             if(!b){
                 //If the value present in the version vector is equal or higher than the
                 // one present in the msg, than the msg is a duplicate
-                if(vv[node] >= m_vv.get(node)) return -1;
+                if(vv[node] >= m_vv[node]) return -1;
                 else return 0;
             }
 
-            for (Map.Entry<Integer, Integer> entry: m_vv.entrySet()){
-                if (entry.getKey() != node && entry.getValue() > vv[entry.getKey()]){
+            for(int k = 0 ; k < vv.length; k++)
+                if(k != node && m_vv[k] > vv[k])
                     return 0;
-                }
-            }
 
             return 1;
         }
@@ -179,9 +178,23 @@ public class FlowableCausalOperator<T> implements FlowableOperator<T, CausalMess
                 if(canItBeDelivered(cm) == 1) {
                     it.remove();
                     deliver(cm);
+                    it = buffer.iterator();
                 }
-                else break;
             }
+        }
+
+        // Returns true there is a message in the buffer that can be delivered
+        private boolean anyMessageThatCanBeDelivered(){
+
+            for(var it = buffer.iterator(); it.hasNext() ; ){
+                var cm = it.next();
+
+                if(canItBeDelivered(cm) == 1) {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void deliver(CausalMessage<T> cm){
